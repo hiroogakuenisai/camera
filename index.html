@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>3台同時カメラ表示 - 高解像度完全版</title>
+  <style>
+    :root {
+      --bg: #0b0d12;
+      --bg-elevated: #14171f;
+      --bg-input: #1a1e28;
+      --border: #262b36;
+      --border-soft: #1f242e;
+      --text: #e8ecf3;
+      --text-muted: #8b93a3;
+      --text-dim: #5a6273;
+      --primary: #4f7cff;
+      --primary-hover: #6b91ff;
+      --primary-dark: #2f5bd6;
+      --success: #2bd4a0;
+      --radius: 14px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif;
+      background:
+        radial-gradient(1200px 600px at 50% -10%, rgba(79, 124, 255, 0.08), transparent 60%),
+        var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+    }
+
+    /* ===== ヘッダーバー ===== */
+    .bar {
+      padding: 14px 24px;
+      background: rgba(17, 20, 27, 0.8);
+      border-bottom: 1px solid var(--border-soft);
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 700;
+      font-size: 17px;
+      letter-spacing: 0.2px;
+    }
+    .brand .logo {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      display: grid;
+      place-items: center;
+      box-shadow: 0 4px 14px rgba(79, 124, 255, 0.4);
+    }
+    .brand .logo svg { width: 20px; height: 20px; stroke: #fff; }
+    .brand small {
+      display: block;
+      font-weight: 500;
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    #status {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--bg-input);
+      padding: 7px 14px 7px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.3s ease;
+      white-space: nowrap;
+    }
+    #status::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      box-shadow: 0 0 0 0 rgba(43, 212, 160, 0.5);
+    }
+    #status.live { color: var(--success); border-color: rgba(43, 212, 160, 0.35); }
+    #status.live::before {
+      background: var(--success);
+      animation: pulse 1.8s infinite;
+    }
+    #status.error { color: #ff6b6b; border-color: rgba(255, 107, 107, 0.35); }
+    #status.error::before { background: #ff6b6b; }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(43, 212, 160, 0.5); }
+      70% { box-shadow: 0 0 0 7px rgba(43, 212, 160, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(43, 212, 160, 0); }
+    }
+
+    .spacer { flex: 1; }
+
+    /* メインの「3枚同時保存」ボタン */
+    #shotAll {
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 22px;
+      cursor: pointer;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: #fff;
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 0.3px;
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      box-shadow: 0 6px 18px rgba(47, 91, 214, 0.4);
+      transition: all 0.18s ease;
+    }
+    #shotAll svg { width: 18px; height: 18px; stroke: #fff; }
+    #shotAll:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 24px rgba(47, 91, 214, 0.5);
+      filter: brightness(1.08);
+    }
+    #shotAll:active:not(:disabled) { transform: translateY(1px); }
+    #shotAll:disabled {
+      background: var(--bg-input);
+      color: var(--text-dim);
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    /* ===== グリッド ===== */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 22px;
+      padding: 28px 24px;
+      max-width: 1680px;
+      margin: 0 auto;
+    }
+
+    /* カメラカード */
+    .cam {
+      background: linear-gradient(180deg, var(--bg-elevated) 0%, #11141b 100%);
+      border: 1px solid var(--border-soft);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.4);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+    .cam:hover {
+      transform: translateY(-3px);
+      border-color: var(--border);
+    }
+
+    .cam h2 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+    .cam h2 .dot {
+      width: 9px; height: 9px;
+      flex: 0 0 auto;
+      background: var(--success);
+      border-radius: 50%;
+      box-shadow: 0 0 8px rgba(43, 212, 160, 0.7);
+    }
+    .cam h2 .name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cam h2 .badge {
+      margin-left: auto;
+      flex: 0 0 auto;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      padding: 3px 9px;
+      border-radius: 999px;
+    }
+
+    .media-container { display: flex; flex-direction: column; gap: 14px; }
+
+    .media-block { display: flex; flex-direction: column; gap: 8px; }
+    .media-title {
+      font-size: 11px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .media-title svg { width: 13px; height: 13px; stroke: var(--text-dim); }
+
+    .frame { position: relative; }
+    video, .frame img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background: #06070b;
+      border-radius: 12px;
+      object-fit: cover;
+      border: 1px solid var(--border-soft);
+    }
+    .frame .empty {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: var(--text-dim);
+      font-size: 12px;
+      gap: 6px;
+      pointer-events: none;
+      text-align: center;
+    }
+    .frame.has-photo .empty { display: none; }
+    .frame .empty svg { width: 26px; height: 26px; stroke: var(--text-dim); opacity: 0.6; }
+
+    /* ボタン群 */
+    .btns { display: flex; gap: 10px; margin-top: 2px; }
+    .cam button, .cam a {
+      flex: 1;
+      border: 0;
+      border-radius: 10px;
+      padding: 11px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      transition: all 0.18s ease;
+    }
+    .cam button svg, .cam a svg { width: 16px; height: 16px; }
+    .cam button {
+      background: var(--primary);
+      color: #fff;
+      flex: 1.4;
+    }
+    .cam button svg { stroke: #fff; }
+    .cam button:hover { background: var(--primary-hover); }
+    .cam a {
+      background: var(--bg-input);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .cam a svg { stroke: currentColor; }
+    .cam a:hover { background: #232936; color: var(--text); }
+
+    /* レスポンシブ */
+    @media (max-width: 1080px) {
+      .grid { grid-template-columns: 1fr; max-width: 560px; }
+    }
+    @media (max-width: 520px) {
+      .bar { padding: 12px 16px; }
+      .brand span.title-text { display: none; }
+      #shotAll { padding: 11px 16px; font-size: 13px; }
+      .grid { padding: 18px 14px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="bar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+        </svg>
+      </span>
+      <span class="title-text">3-Camera Capture
+        <small>High-Resolution Studio</small>
+      </span>
+    </div>
+    <div id="status">カメラ準備中...</div>
+    <div class="spacer"></div>
+    <button id="shotAll">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      3枚同時撮影 → ZIP保存
+    </button>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script>
+    const grid = document.getElementById("grid");
+    const statusEl = document.getElementById("status");
+    const shotAllBtn = document.getElementById("shotAll");
+    const sessions = [];
+
+    function setStatus(text, type) {
+      statusEl.textContent = text;
+      statusEl.classList.remove("live", "error");
+      if (type) statusEl.classList.add(type);
+    }
+
+    async function selectSameNameCameras() {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cameras = devices.filter(d => d.kind === "videoinput");
+
+      const labelGroups = {};
+      cameras.forEach(cam => {
+        const label = cam.label.toLowerCase().trim();
+        if (!labelGroups[label]) labelGroups[label] = [];
+        labelGroups[label].push(cam);
+      });
+
+      let targetGroup = null;
+      for (const label of Object.keys(labelGroups)) {
+        if (labelGroups[label].length >= 3) {
+          targetGroup = labelGroups[label].slice(0, 3);
+          break;
+        }
+      }
+
+      if (!targetGroup) {
+        targetGroup = cameras.filter(cam => {
+          const label = cam.label.toLowerCase();
+          return label.includes("usb") || label.includes("webcam") || label.includes("external");
+        }).slice(0, 3);
+      }
+
+      if (!targetGroup || targetGroup.length < 3) {
+        targetGroup = cameras.slice(0, 3);
+      }
+
+      return targetGroup;
+    }
+
+    async function start() {
+      setStatus("カメラへのアクセスを要求中...");
+      await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      const cams = await selectSameNameCameras();
+
+      if (cams.length < 3) {
+        setStatus(`エラー: カメラが${cams.length}台しか見つかりません。`, "error");
+        return;
+      }
+
+      setStatus("ライブ配信中（3台接続完了）", "live");
+
+      for (let i = 0; i < 3; i++) {
+        const cam = cams[i];
+
+        // ビデオ表示は低負荷にして帯域を節約
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            deviceId: { exact: cam.deviceId },
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          },
+          audio: false
+        });
+
+        const track = stream.getVideoTracks()[0];
+        const imageCapture = ("ImageCapture" in window) ? new ImageCapture(track) : null;
+
+        const box = document.createElement("div");
+        box.className = "cam";
+
+        // タイトル
+        const title = document.createElement("h2");
+        const dot = document.createElement("span"); dot.className = "dot";
+        const name = document.createElement("span"); name.className = "name";
+        name.textContent = cam.label || `Camera ${i + 1}`;
+        const badge = document.createElement("span"); badge.className = "badge";
+        badge.textContent = `${i + 1} / 3`;
+        title.appendChild(dot); title.appendChild(name); title.appendChild(badge);
+        box.appendChild(title);
+
+        const mediaWrap = document.createElement("div");
+        mediaWrap.className = "media-container";
+
+        // ライブ映像セクション
+        const liveBlock = document.createElement("div");
+        liveBlock.className = "media-block";
+        const liveTitle = document.createElement("div");
+        liveTitle.className = "media-title";
+        liveTitle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/></svg> Live Stream';
+        const liveFrame = document.createElement("div");
+        liveFrame.className = "frame";
+        const video = document.createElement("video");
+        video.autoplay = true;
+        video.playsInline = true;
+        video.muted = true;
+        video.srcObject = stream;
+        liveFrame.appendChild(video);
+        liveBlock.appendChild(liveTitle);
+        liveBlock.appendChild(liveFrame);
+        mediaWrap.appendChild(liveBlock);
+
+        // 撮影写真セクション
+        const photoBlock = document.createElement("div");
+        photoBlock.className = "media-block";
+        const photoTitle = document.createElement("div");
+        photoTitle.className = "media-title";
+        photoTitle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Captured Photo';
+        const photoFrame = document.createElement("div");
+        photoFrame.className = "frame";
+        const preview = document.createElement("img");
+        preview.alt = "撮影プレビュー";
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg><span>未撮影</span>';
+        photoFrame.appendChild(preview);
+        photoFrame.appendChild(empty);
+        photoBlock.appendChild(photoTitle);
+        photoBlock.appendChild(photoFrame);
+        mediaWrap.appendChild(photoBlock);
+
+        box.appendChild(mediaWrap);
+
+        // ボタンセクション
+        const btns = document.createElement("div");
+        btns.className = "btns";
+
+        const shot = document.createElement("button");
+        shot.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> 個別撮影';
+
+        const download = document.createElement("a");
+        download.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> DL';
+        download.download = `camera-${i + 1}.jpg`;
+        download.href = "#";
+
+        shot.onclick = async () => {
+          setStatus(`カメラ ${i + 1} 撮影中...`);
+          const blob = await captureHighRes(video, track, imageCapture);
+          const url = URL.createObjectURL(blob);
+          preview.src = url;
+          photoFrame.classList.add("has-photo");
+          download.href = url;
+          download.download = `camera-${i + 1}-${Date.now()}.jpg`;
+          setStatus(`カメラ ${i + 1} 保存完了`, "live");
+        };
+
+        btns.appendChild(shot);
+        btns.appendChild(download);
+        box.appendChild(btns);
+
+        grid.appendChild(box);
+        // 【連動強化】download要素オブジェクトも配列に追跡保管
+        sessions.push({ video, track, imageCapture, preview, photoFrame, download });
+      }
+    }
+
+    async function captureHighRes(video, track, imageCapture) {
+      if (imageCapture && imageCapture.takePhoto) {
+        try {
+          return await imageCapture.takePhoto();
+        } catch (e) {
+          console.warn("Canvas切り替え:", e);
+        }
+      }
+      const canvas = document.createElement("canvas");
+      const w = video.videoWidth || 1920;
+      const h = video.videoHeight || 1080;
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, w, h);
+      return new Promise(r => canvas.toBlob(r, "image/jpeg", 0.95));
+    }
+
+    shotAllBtn.onclick = async () => {
+      if (sessions.length < 3) return;
+
+      try {
+        shotAllBtn.disabled = true;
+        const zip = new JSZip();
+
+        // 競合防止のため1台ずつ順番（直列）に最高画質で撮影
+        for (let i = 0; i < sessions.length; i++) {
+          setStatus(`撮影中 (${i + 1}/3枚目)...`);
+          const s = sessions[i];
+          try {
+            const blob = await captureHighRes(s.video, s.track, s.imageCapture);
+            zip.file(`camera-${i + 1}.jpg`, blob);
+
+            const url = URL.createObjectURL(blob);
+            s.preview.src = url;
+            s.photoFrame.classList.add("has-photo");
+
+            // 【完全同期】同時撮影の際も、個別のDLボタンの保存URLを最新に書き換える
+            s.download.href = url;
+            s.download.download = `camera-${i + 1}-${Date.now()}.jpg`;
+
+            // ハードウェアの制御リセット待ち（250ms）
+            await new Promise(resolve => setTimeout(resolve, 250));
+          } catch (e) {
+            console.error(e);
+          }
+        }
+
+        setStatus("ZIPパッケージを生成中...");
+        const content = await zip.generateAsync({ type: "blob" });
+
+        const zipUrl = URL.createObjectURL(content);
+        const a = document.createElement("a");
+        a.href = zipUrl;
+        a.download = `3cameras-highres-${Date.now()}.zip`;
+        a.click();
+
+        setTimeout(() => URL.revokeObjectURL(zipUrl), 60000);
+        setStatus("✓ ZIPダウンロードが完了しました", "live");
+      } catch (e) {
+        setStatus(`エラー: ${e.message}`, "error");
+      } finally {
+        shotAllBtn.disabled = false;
+      }
+    };
+
+    start().catch(err => {
+      setStatus(`エラー: ${err.message}`, "error");
+    });
+  </script>
+</body>
+</html>
