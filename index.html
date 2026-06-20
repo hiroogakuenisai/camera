@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>3台同時カメラ表示 - 高解像度完全版</title>
+  <title>3台同時カメラ表示 - 高解像度・帯域安全版</title>
   <style>
     :root {
       --bg: #0b0d12;
@@ -61,7 +61,7 @@
     .brand .logo {
       width: 34px;
       height: 34px;
-      border-radius: 9px;
+      border-radius: 99px;
       background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
       display: grid;
       place-items: center;
@@ -376,108 +376,115 @@
       for (let i = 0; i < 3; i++) {
         const cam = cams[i];
 
-        // ビデオ表示は低負荷にして帯域を節約
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            deviceId: { exact: cam.deviceId },
-            width: { ideal: 640 },
-            height: { ideal: 480 }
-          },
-          audio: false
-        });
+        try {
+          // 【帯域エラー対策】max制限と低フレームレートで、動画接続の初期負荷を極限までセーブ
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              deviceId: { exact: cam.deviceId },
+              width: { max: 640 },
+              height: { max: 480 },
+              frameRate: { max: 15 } 
+            },
+            audio: false
+          });
 
-        const track = stream.getVideoTracks()[0];
-        const imageCapture = ("ImageCapture" in window) ? new ImageCapture(track) : null;
+          const track = stream.getVideoTracks()[0];
+          const imageCapture = ("ImageCapture" in window) ? new ImageCapture(track) : null;
 
-        const box = document.createElement("div");
-        box.className = "cam";
+          const box = document.createElement("div");
+          box.className = "cam";
 
-        // タイトル
-        const title = document.createElement("h2");
-        const dot = document.createElement("span"); dot.className = "dot";
-        const name = document.createElement("span"); name.className = "name";
-        name.textContent = cam.label || `Camera ${i + 1}`;
-        const badge = document.createElement("span"); badge.className = "badge";
-        badge.textContent = `${i + 1} / 3`;
-        title.appendChild(dot); title.appendChild(name); title.appendChild(badge);
-        box.appendChild(title);
+          // タイトル
+          const title = document.createElement("h2");
+          const dot = document.createElement("span"); dot.className = "dot";
+          const name = document.createElement("span"); name.className = "name";
+          name.textContent = cam.label || `Camera ${i + 1}`;
+          const badge = document.createElement("span"); badge.className = "badge";
+          badge.textContent = `${i + 1} / 3`;
+          title.appendChild(dot); title.appendChild(name); title.appendChild(badge);
+          box.appendChild(title);
 
-        const mediaWrap = document.createElement("div");
-        mediaWrap.className = "media-container";
+          const mediaWrap = document.createElement("div");
+          mediaWrap.className = "media-container";
 
-        // ライブ映像セクション
-        const liveBlock = document.createElement("div");
-        liveBlock.className = "media-block";
-        const liveTitle = document.createElement("div");
-        liveTitle.className = "media-title";
-        liveTitle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/></svg> Live Stream';
-        const liveFrame = document.createElement("div");
-        liveFrame.className = "frame";
-        const video = document.createElement("video");
-        video.autoplay = true;
-        video.playsInline = true;
-        video.muted = true;
-        video.srcObject = stream;
-        liveFrame.appendChild(video);
-        liveBlock.appendChild(liveTitle);
-        liveBlock.appendChild(liveFrame);
-        mediaWrap.appendChild(liveBlock);
+          // ライブ映像セクション
+          const liveBlock = document.createElement("div");
+          liveBlock.className = "media-block";
+          const liveTitle = document.createElement("div");
+          liveTitle.className = "media-title";
+          liveTitle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/></svg> Live Stream';
+          const liveFrame = document.createElement("div");
+          liveFrame.className = "frame";
+          const video = document.createElement("video");
+          video.autoplay = true;
+          video.playsInline = true;
+          video.muted = true;
+          video.srcObject = stream;
+          liveFrame.appendChild(video);
+          liveBlock.appendChild(liveTitle);
+          liveBlock.appendChild(liveFrame);
+          mediaWrap.appendChild(liveBlock);
 
-        // 撮影写真セクション
-        const photoBlock = document.createElement("div");
-        photoBlock.className = "media-block";
-        const photoTitle = document.createElement("div");
-        photoTitle.className = "media-title";
-        photoTitle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Captured Photo';
-        const photoFrame = document.createElement("div");
-        photoFrame.className = "frame";
-        const preview = document.createElement("img");
-        preview.alt = "撮影プレビュー";
-        const empty = document.createElement("div");
-        empty.className = "empty";
-        empty.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg><span>未撮影</span>';
-        photoFrame.appendChild(preview);
-        photoFrame.appendChild(empty);
-        photoBlock.appendChild(photoTitle);
-        photoBlock.appendChild(photoFrame);
-        mediaWrap.appendChild(photoBlock);
+          // 撮影写真セクション
+          const photoBlock = document.createElement("div");
+          photoBlock.className = "media-block";
+          const photoTitle = document.createElement("div");
+          photoTitle.className = "media-title";
+          photoTitle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Captured Photo';
+          const photoFrame = document.createElement("div");
+          photoFrame.className = "frame";
+          const preview = document.createElement("img");
+          preview.alt = "撮影プレビュー";
+          const empty = document.createElement("div");
+          empty.className = "empty";
+          empty.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg><span>未撮影</span>';
+          photoFrame.appendChild(preview);
+          photoFrame.appendChild(empty);
+          photoBlock.appendChild(photoTitle);
+          photoBlock.appendChild(photoFrame);
+          mediaWrap.appendChild(photoBlock);
 
-        box.appendChild(mediaWrap);
+          box.appendChild(mediaWrap);
 
-        // ボタンセクション
-        const btns = document.createElement("div");
-        btns.className = "btns";
+          // ボタンセクション
+          const btns = document.createElement("div");
+          btns.className = "btns";
 
-        const shot = document.createElement("button");
-        shot.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> 個別撮影';
+          const shot = document.createElement("button");
+          shot.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> 個別撮影';
 
-        const download = document.createElement("a");
-        download.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> DL';
-        download.download = `camera-${i + 1}.jpg`;
-        download.href = "#";
+          const download = document.createElement("a");
+          download.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> DL';
+          download.download = `camera-${i + 1}.jpg`;
+          download.href = "#";
 
-        shot.onclick = async () => {
-          setStatus(`カメラ ${i + 1} 撮影中...`);
-          const blob = await captureHighRes(video, track, imageCapture);
-          const url = URL.createObjectURL(blob);
-          preview.src = url;
-          photoFrame.classList.add("has-photo");
-          download.href = url;
-          download.download = `camera-${i + 1}-${Date.now()}.jpg`;
-          setStatus(`カメラ ${i + 1} 保存完了`, "live");
-        };
+          shot.onclick = async () => {
+            setStatus(`カメラ ${i + 1} 撮影中...`);
+            const blob = await captureHighRes(video, track, imageCapture);
+            const url = URL.createObjectURL(blob);
+            preview.src = url;
+            photoFrame.classList.add("has-photo");
+            download.href = url;
+            download.download = `camera-${i + 1}-${Date.now()}.jpg`;
+            setStatus(`カメラ ${i + 1} 保存完了`, "live");
+          };
 
-        btns.appendChild(shot);
-        btns.appendChild(download);
-        box.appendChild(btns);
+          btns.appendChild(shot);
+          btns.appendChild(download);
+          box.appendChild(btns);
 
-        grid.appendChild(box);
-        // 【連動強化】download要素オブジェクトも配列に追跡保管
-        sessions.push({ video, track, imageCapture, preview, photoFrame, download });
+          grid.appendChild(box);
+          // 追跡配列にdownload要素も合わせて追加
+          sessions.push({ video, track, imageCapture, preview, photoFrame, download });
+        } catch (e) {
+          console.error(`カメラ ${i + 1} の起動失敗:`, e);
+          setStatus(`カメラ ${i + 1} が起動できません。USBポートを変更してください。`, "error");
+        }
       }
     }
 
     async function captureHighRes(video, track, imageCapture) {
+      // ImageCaptureが使える場合は動画制限(640)を無視して物理最大解像度で写真撮影
       if (imageCapture && imageCapture.takePhoto) {
         try {
           return await imageCapture.takePhoto();
@@ -496,7 +503,7 @@
     }
 
     shotAllBtn.onclick = async () => {
-      if (sessions.length < 3) return;
+      if (sessions.length < 1) return;
 
       try {
         shotAllBtn.disabled = true;
@@ -504,7 +511,7 @@
 
         // 競合防止のため1台ずつ順番（直列）に最高画質で撮影
         for (let i = 0; i < sessions.length; i++) {
-          setStatus(`撮影中 (${i + 1}/3枚目)...`);
+          setStatus(`撮影中 (${i + 1}/${sessions.length}枚目)...`);
           const s = sessions[i];
           try {
             const blob = await captureHighRes(s.video, s.track, s.imageCapture);
@@ -514,11 +521,11 @@
             s.preview.src = url;
             s.photoFrame.classList.add("has-photo");
 
-            // 【完全同期】同時撮影の際も、個別のDLボタンの保存URLを最新に書き換える
+            // 同時撮影時も個別のDLリンクを最新状態に完全同期
             s.download.href = url;
             s.download.download = `camera-${i + 1}-${Date.now()}.jpg`;
 
-            // ハードウェアの制御リセット待ち（250ms）
+            // ハードウェアの処理完了待ちディレイ（250ms）
             await new Promise(resolve => setTimeout(resolve, 250));
           } catch (e) {
             console.error(e);
